@@ -81,6 +81,59 @@ func Test_ConfigFileOverride(t *testing.T) {
 	require.Equal(t, "0xDEADBEEF", cfg.L1.PolygonValidiumAddress)
 }
 
+func Test_NewKeyFromKeystore(t *testing.T) {
+	t.Parallel()
+
+	t.Run("valid keystore file", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := types.KeystoreFileConfig{
+			Path:     "../test/config/test-member.keystore",
+			Password: "testonly",
+		}
+
+		key, err := NewKeyFromKeystore(cfg)
+		require.NoError(t, err)
+		require.NotNil(t, key)
+	})
+
+	t.Run("no path and password", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := types.KeystoreFileConfig{}
+
+		key, err := NewKeyFromKeystore(cfg)
+		require.NoError(t, err)
+		require.Nil(t, key)
+	})
+
+	t.Run("invalid keystore file", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := types.KeystoreFileConfig{
+			Path:     "non-existent.keystore",
+			Password: "testonly",
+		}
+
+		key, err := NewKeyFromKeystore(cfg)
+		require.ErrorContains(t, err, "no such file or directory")
+		require.Nil(t, key)
+	})
+
+	t.Run("invalid password", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := types.KeystoreFileConfig{
+			Path:     "../test/config/test-member.keystore",
+			Password: "invalid",
+		}
+
+		key, err := NewKeyFromKeystore(cfg)
+		require.ErrorContains(t, err, "could not decrypt key with given password")
+		require.Nil(t, key)
+	})
+}
+
 func getValueFromStruct(path string, object interface{}) interface{} {
 	keySlice := strings.Split(path, ".")
 	v := reflect.ValueOf(object)

@@ -127,7 +127,7 @@ func start(cliCtx *cli.Context) error {
 		log.Fatal(err)
 	}
 
-	if err = detector.Start(); err != nil {
+	if err = detector.Start(cliCtx.Context); err != nil {
 		log.Fatal(err)
 	}
 
@@ -154,7 +154,7 @@ func start(cliCtx *cli.Context) error {
 		[]rpc.Service{
 			{
 				Name:    status.APISTATUS,
-				Service: status.NewEndpoints(storage, batchSynchronizer),
+				Service: status.NewEndpoints(storage),
 			},
 			{
 				Name:    sync.APISYNC,

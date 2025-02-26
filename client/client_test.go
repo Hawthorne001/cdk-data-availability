@@ -28,12 +28,12 @@ func TestClient_GetStatus(t *testing.T) {
 	}{
 		{
 			name:   "successfully got status",
-			result: `{"result":{"version":"v1.0.0","uptime":"123","key_count":2,"backfill_progress":5}}`,
+			result: `{"result":{"version":"v1.0.0","uptime":"123","key_count":2,"last_synchronized_block":5}}`,
 			status: &types.DACStatus{
-				Uptime:           "123",
-				Version:          "v1.0.0",
-				KeyCount:         2,
-				BackfillProgress: 5,
+				Uptime:                "123",
+				Version:               "v1.0.0",
+				KeyCount:              2,
+				LastSynchronizedBlock: 5,
 			},
 		},
 		{
@@ -251,7 +251,7 @@ func TestClient_ListOffChainData(t *testing.T) {
 		err        error
 	}{
 		{
-			name:   "successfully got offhcain data",
+			name:   "successfully got offchain data",
 			hashes: []common.Hash{common.BytesToHash([]byte("hash"))},
 			result: fmt.Sprintf(`{"result":{"%s":"%s"}}`,
 				common.BytesToHash([]byte("hash")).Hex(), hex.EncodeToString([]byte("offchaindata"))),
@@ -317,4 +317,103 @@ func TestClient_ListOffChainData(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestClient_SignSequenceBanana(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		ssb        types.SignedSequenceBanana
+		result     string
+		signature  []byte
+		statusCode int
+		err        error
+	}{
+		{
+			name: "successfully signed banana sequence",
+			ssb: types.SignedSequenceBanana{
+				Sequence:  types.SequenceBanana{},
+				Signature: []byte("signature00"),
+			},
+			result:    fmt.Sprintf(`{"result":"%s"}`, hex.EncodeToString([]byte("signature11"))),
+			signature: []byte("signature11"),
+		},
+		{
+			name: "error returned by rpc server",
+			ssb: types.SignedSequenceBanana{
+				Sequence:  types.SequenceBanana{},
+				Signature: []byte("signature00"),
+			},
+			result: `{"error":{"code":123,"message":"test error"}}`,
+			err:    errors.New("123 test error"),
+		},
+		{
+			name: "invalid signature returned by rpc server",
+			ssb: types.SignedSequenceBanana{
+				Sequence:  types.SequenceBanana{},
+				Signature: []byte("signature00"),
+			},
+			result: `{"result":"invalid-signature"}`,
+		},
+		{
+			name: "unsuccessful status code returned by rpc server",
+			ssb: types.SignedSequenceBanana{
+				Sequence:  types.SequenceBanana{},
+				Signature: []byte("signature00"),
+			},
+			statusCode: http.StatusInternalServerError,
+			err:        errors.New("invalid status code, expected: 200, found: 500"),
+		},
+	}
+	for _, tt := range tests {
+		tt := tt
+
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var request rpc.Request
+				require.NoError(t, json.NewDecoder(r.Body).Decode(&request))
+				require.Equal(t, "datacom_signSequenceBanana", request.Method)
+
+				var params []types.SignedSequenceBanana
+				require.NoError(t, json.Unmarshal(request.Params, &params))
+				require.Equal(t, tt.ssb, params[0])
+
+				if tt.statusCode > 0 {
+					w.WriteHeader(tt.statusCode)
+				}
+
+				_, err := fmt.Fprint(w, tt.result)
+				require.NoError(t, err)
+			}))
+			defer srv.Close()
+
+			client := New(srv.URL)
+
+			result, err := client.SignSequenceBanana(context.Background(), tt.ssb)
+			if tt.err != nil {
+				require.Error(t, err)
+				require.EqualError(t, tt.err, err.Error())
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tt.signature, result)
+			}
+		})
+	}
+}
+
+func TestClient_Factory_New(t *testing.T) {
+	t.Parallel()
+
+	url := "http://example.com"
+	f := NewFactory()
+
+	c := f.New(url)
+	require.NotNil(t, c)
+
+	client, ok := c.(*client)
+	require.True(t, ok)
+	require.Equal(t, url, client.url)
 }
